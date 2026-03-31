@@ -4,6 +4,13 @@ Insyte — Document Intelligence Platform (Research Prototype)
 Run:  streamlit run appv2.py
 """
 
+import sys
+import os
+
+# Ensure the directory containing this file is on sys.path so that the
+# 'pipeline' package is importable regardless of where Render starts the process.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from collections import defaultdict
 
 import streamlit as st
