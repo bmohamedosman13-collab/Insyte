@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: insyte
+    runtime: python
+    region: oregon
+
+    # Downloads dependencies + NLTK data + pre-caches the embedding model
+    buildCommand: >
+      pip install -r requirements.txt &&
+      python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('stopwords')" &&
+      python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+    startCommand: >
+      streamlit run appv2.py
+      --server.port $PORT
+      --server.address 0.0.0.0
+      --server.headless true
+      --server.enableCORS false
+      --server.enableXsrfProtection true
+
+    envVars:
+      - key: INSYTE_PASSWORD
+        sync: false          # you set this manually in the Render dashboard
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+    # Free tier — set to starter if you need always-on (no sleep)
+    plan: free

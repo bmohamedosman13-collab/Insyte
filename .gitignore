@@ -1,0 +1,49 @@
+# ── Secrets — NEVER commit these ──────────────────────────────
+.env
+*.env
+.env.*
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Virtual environments ───────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Build / packaging ─────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ── Model cache (large — downloaded at runtime) ───────────────
+.cache/
+models/
+*.bin
+*.safetensors
+
+# ── HuggingFace / sentence-transformers cache ─────────────────
+~/.cache/huggingface/
+sentence_transformers_cache/
+
+# ── NLTK data ─────────────────────────────────────────────────
+nltk_data/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ── Uploads / temp ────────────────────────────────────────────
+uploads/
+*.pdf
