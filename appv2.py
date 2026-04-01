@@ -627,7 +627,7 @@ if "docs" not in st.session_state:
         st.session_state["synthesis"] = synthesis
 
     with st.spinner("Scanning for risk language…"):
-        st.session_state["risk_results"] = scan_risks(docs, embed_model)
+        st.session_state["risk_results"] = scan_risks(docs)
 
 docs: list[dict]       = st.session_state["docs"]
 synthesis: list[dict]  = st.session_state["synthesis"]

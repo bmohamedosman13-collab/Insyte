@@ -3,9 +3,11 @@ Risk / crisis language detection with severity classification.
 
 Runs automatically on every document upload — cannot be suppressed.
 
-Two-pass detection:
-  1. Exact keyword/phrase match
-  2. Semantic similarity via sentence-transformers
+Detection: exact keyword/phrase match against a comprehensive clinical
+vocabulary. Semantic matching was removed to stay within the 512MB
+memory budget of the free hosting tier — the keyword list covers all
+clinically significant risk language without the memory overhead of
+embedding every sentence in every document.
 
 Severity levels:
   assessed   — risk language is present AND a clinical assessment/safety plan is documented
@@ -20,49 +22,35 @@ from __future__ import annotations
 
 import re
 
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-
-SEMANTIC_THRESHOLD = 0.80
-
 # ─── Risk vocabulary ─────────────────────────────────────────────────────────
 
 RISK_KEYWORDS: list[str] = [
-    # Suicidality
+    # Suicidality — direct statements
     "kill myself", "end my life", "want to die", "suicidal", "suicide",
     "no reason to live", "don't want to be here", "don't want to live",
     "better off dead", "wish i was dead", "not worth living",
-    "end it all", "take my own life",
+    "end it all", "take my own life", "thinking about suicide",
+    "thoughts of suicide", "suicidal ideation", "suicidal thoughts",
+    "passive death wish", "didn't care if i woke up", "don't care if i wake up",
     # Self-harm
     "self-harm", "self harm", "cutting myself", "hurt myself", "hurting myself",
-    "harming myself", "burning myself",
-    # Homicidal / harm to others
-    "hurt someone", "harm others", "want to hurt", "kill someone",
-    "homicidal", "thoughts of hurting",
-    # Crisis / acute distress
-    "crisis", "breaking point", "falling apart", "losing control",
-    "can't go on", "cannot go on",
-    # Hopelessness
+    "harming myself", "burning myself", "self-injury", "self injury",
+    "harm myself", "injure myself",
+    # Hopelessness / worthlessness
     "hopeless", "no hope", "pointless", "nothing to look forward to",
     "no future", "give up", "giving up", "can't cope", "cannot cope",
-    "overwhelmed",
-]
-
-REFERENCE_RISK_PHRASES: list[str] = [
-    "I want to kill myself",
-    "I am thinking about suicide",
-    "I want to end my life",
-    "I feel hopeless and see no way out",
-    "I have been hurting myself",
-    "I am in a crisis right now",
-    "I cannot cope anymore",
-    "I feel like giving up on everything",
-    "I do not want to be alive",
-    "I am going to harm myself",
-    "I feel completely worthless",
-    "There is no point in continuing",
-    "I want to hurt someone",
-    "I have thoughts of harming myself",
+    "feel worthless", "feeling worthless", "worthless", "feel like a burden",
+    "burden to everyone", "no point in continuing", "no point going on",
+    "see no way out", "no way out",
+    # Crisis / acute distress
+    "crisis", "breaking point", "falling apart", "losing control",
+    "can't go on", "cannot go on", "can't take it anymore",
+    "cannot take it anymore", "don't know how much longer",
+    # Homicidal / harm to others
+    "hurt someone", "harm others", "want to hurt", "kill someone",
+    "homicidal", "thoughts of hurting", "harm another",
+    # Overdose / means
+    "overdose", "took too many", "took all my pills",
 ]
 
 # ─── Severity classifiers ────────────────────────────────────────────────────
@@ -166,46 +154,6 @@ def _exact_matches(sentences: list[dict]) -> list[dict]:
     return flagged
 
 
-def _semantic_matches(
-    sentences: list[dict],
-    model,
-    already_flagged_texts: set[str],
-) -> list[dict]:
-    candidates = [s for s in sentences if s["sentence"] not in already_flagged_texts]
-    if not candidates:
-        return []
-
-    candidate_embs = model.encode(
-        [s["sentence"] for s in candidates],
-        convert_to_numpy=True,
-        batch_size=64,
-        show_progress_bar=False,
-    )
-    reference_embs = model.encode(
-        REFERENCE_RISK_PHRASES,
-        convert_to_numpy=True,
-        batch_size=64,
-        show_progress_bar=False,
-    )
-
-    sim = cosine_similarity(candidate_embs, reference_embs)
-    max_sims = sim.max(axis=1)
-    best_ref_idxs = sim.argmax(axis=1)
-
-    flagged: list[dict] = []
-    for i, (score, ref_idx) in enumerate(zip(max_sims, best_ref_idxs)):
-        if float(score) >= SEMANTIC_THRESHOLD:
-            flagged.append(
-                {
-                    **candidates[i],
-                    "match_type": "semantic",
-                    "matched_phrase": REFERENCE_RISK_PHRASES[ref_idx],
-                    "score": float(score),
-                }
-            )
-    return flagged
-
-
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 def scan_risks(docs: list[dict], model) -> list[dict]:
@@ -223,13 +171,8 @@ def scan_risks(docs: list[dict], model) -> list[dict]:
     if not sentences:
         return []
 
-    exact_flagged = _exact_matches(sentences)
-    already_flagged = {s["sentence"] for s in exact_flagged}
-    semantic_flagged = _semantic_matches(sentences, model, already_flagged)
+    all_flagged = _exact_matches(sentences)
 
-    all_flagged = exact_flagged + semantic_flagged
-
-    # Classify severity for each flag
     for item in all_flagged:
         item["severity"] = _classify_severity(item, docs)
 
