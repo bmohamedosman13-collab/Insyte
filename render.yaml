@@ -4,10 +4,19 @@ services:
     runtime: python
     region: oregon
 
-    buildCommand: >
+    # Pre-download the ONNX model into .model_cache during build so it is
+    # available on disk at runtime — no download delay on first request.
+    # Uses the same absolute path logic as _MODEL_CACHE in appv2.py.
+    buildCommand: |
       pip install -r requirements.txt &&
       python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('stopwords')" &&
-      python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='./.model_cache').embed(['warmup']))"
+      python -c "
+      import os
+      from fastembed import TextEmbedding
+      cache = os.path.join(os.path.dirname(os.path.abspath('appv2.py')), '.model_cache')
+      list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir=cache).embed(['warmup']))
+      print('Model cached at', cache)
+      "
 
     startCommand: >
       streamlit run appv2.py

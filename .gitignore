@@ -22,15 +22,14 @@ dist/
 *.egg-info/
 .eggs/
 
-# ── Model cache (large — downloaded at runtime) ───────────────
+# ── Model cache — downloaded during Render build, not committed ──
+.model_cache/
 .cache/
 models/
 *.bin
 *.safetensors
-
-# ── HuggingFace / sentence-transformers cache ─────────────────
-~/.cache/huggingface/
-sentence_transformers_cache/
+*.onnx
+*.ort
 
 # ── NLTK data ─────────────────────────────────────────────────
 nltk_data/

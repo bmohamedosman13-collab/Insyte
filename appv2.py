@@ -6,8 +6,13 @@ Run:  streamlit run appv2.py
 
 import sys
 import os
+import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _APP_DIR)
+
+# Absolute path to the model cache — consistent between Render build and runtime
+_MODEL_CACHE = os.path.join(_APP_DIR, ".model_cache")
 
 from collections import defaultdict
 
@@ -222,23 +227,23 @@ st.markdown(
 
 @st.cache_resource(show_spinner="Loading the tools...")
 def load_embedding_model():
-    import numpy as np
     from fastembed import TextEmbedding
 
     class _EmbedWrapper:
-        """Drop-in replacement for SentenceTransformer using fastembed + ONNX.
-        Uses ~80 MB RAM versus ~400 MB for torch-backed sentence-transformers."""
-        def __init__(self):
+        """Wraps fastembed (ONNX Runtime) to match the SentenceTransformer API.
+        Uses ~80 MB RAM vs ~400 MB for PyTorch-backed sentence-transformers."""
+        def __init__(self, cache_dir: str):
             self._model = TextEmbedding(
                 model_name="BAAI/bge-small-en-v1.5",
-                cache_dir="./.model_cache",
+                cache_dir=cache_dir,
             )
 
         def encode(self, texts, convert_to_numpy=True,
                    batch_size=64, show_progress_bar=False):
+            # np is imported at module level — safe across cache restores
             return np.array(list(self._model.embed(texts)))
 
-    return _EmbedWrapper()
+    return _EmbedWrapper(cache_dir=_MODEL_CACHE)
 
 
 # ─── Pipeline imports ─────────────────────────────────────────────────────────
