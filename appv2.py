@@ -225,17 +225,21 @@ st.markdown(
 
 # ─── Model loading ────────────────────────────────────────────────────────────
 
-@st.cache_resource(show_spinner="Loading language models… (first run only)")
+@st.cache_resource(show_spinner="Loading the tools...")
 def load_embedding_model():
     from sentence_transformers import SentenceTransformer
     return SentenceTransformer("all-MiniLM-L6-v2")
+
+
+# Pre-load immediately after auth so the model is warm before any upload.
+# This runs once and is then served from cache — no delay on first upload.
+load_embedding_model()
 
 
 # ─── Pipeline imports ─────────────────────────────────────────────────────────
 from pipeline import (  # noqa: E402
     extract_documents,
     summarize_documents,
-    get_ollama_status,
     contextual_search,
     exact_search,
     analyze_language,
@@ -490,8 +494,6 @@ def _render_summary_card(doc_summary: dict, risk_results: list[dict]) -> None:
             # LLM / fallback badge
             if llm_used and model_used:
                 st.caption(f"AI · `{model_used}`")
-            else:
-                st.caption("Extractive (Ollama unavailable)")
 
         with right:
             if insufficient:
@@ -564,25 +566,6 @@ with st.sidebar:
         '<p class="insyte-tagline">Document Intelligence</p>',
         unsafe_allow_html=True,
     )
-
-    # ── Ollama status ──
-    _ollama = get_ollama_status()
-    if _ollama["available"] and _ollama["model"]:
-        st.markdown(
-            f'<div style="font-size:0.75rem;color:#4ade80;margin-bottom:2px;">'
-            f'● Ollama · <code>{_ollama["model"]}</code></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        with st.expander("Ollama not detected", expanded=False):
-            st.caption(
-                "Summaries will fall back to extractive mode (lower quality).  \n\n"
-                "To enable AI summaries:  \n"
-                "1. Install Ollama from **ollama.com**  \n"
-                "2. Run `ollama pull llama3.1` (or mistral, phi4, etc.)  \n"
-                "3. Start Ollama — it runs on port 11434  \n"
-                "4. Re-upload your documents"
-            )
 
     st.divider()
     uploaded_files = st.file_uploader(
