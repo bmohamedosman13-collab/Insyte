@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Applied when the login screen is shown — hides the sidebar and centres the form.
 _LOGIN_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Cormorant+Garamond:wght@400;600&display=swap');
@@ -11,17 +12,19 @@ _LOGIN_CSS = """
 html, body, [class*="css"], p, li, span, div {
     font-family: 'DM Sans', sans-serif;
 }
-h1, h2, h3 {
-    font-family: 'Cormorant Garamond', serif !important;
-}
 
-.stApp { background-color: #0C0820; }
-.main  { background-color: #0C0820; }
+/* Hide sidebar entirely on the login screen */
+[data-testid="stSidebar"] { display: none !important; }
+
+/* Centre the form in the wide-layout main area */
 .main .block-container {
-    background-color: #0C0820;
-    max-width: 420px;
-    padding-top: 5rem;
+    max-width: 420px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-top: 5rem !important;
+    background-color: #0C0820 !important;
 }
+.stApp { background-color: #0C0820; }
 
 /* Wordmark */
 .insyte-login-wordmark {
@@ -75,7 +78,7 @@ hr { border-color: #35265A !important; }
     border: none;
 }
 
-/* Disclaimer box */
+/* Disclaimer */
 .insyte-disclaimer {
     background-color: #160F2E;
     border: 1px solid #35265A;
@@ -86,12 +89,8 @@ hr { border-color: #35265A !important; }
     color: #C4B89A;
     line-height: 1.6;
 }
-.insyte-disclaimer a {
-    color: #C9A84C;
-    text-decoration: none;
-}
+.insyte-disclaimer a { color: #C9A84C; text-decoration: none; }
 
-/* Error / info alerts */
 div[data-testid="stAlert"] { border-radius: 6px; }
 .stMarkdown p { color: #F5EFE0; }
 </style>
@@ -101,12 +100,12 @@ div[data-testid="stAlert"] { border-radius: 6px; }
 def check_password() -> bool:
     """
     Render a password gate. Returns True only when the user has authenticated.
-    Nothing in the calling app should render until this returns True.
+    st.set_page_config is intentionally NOT called here — appv2.py calls it
+    first (before this function) so there is exactly one call per render cycle.
     """
     if st.session_state.get("authenticated"):
         return True
 
-    st.set_page_config(page_title="Insyte", layout="centered")
     st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
 
     st.markdown(
@@ -114,7 +113,6 @@ def check_password() -> bool:
         '<p class="insyte-login-sub">Document Intelligence</p>',
         unsafe_allow_html=True,
     )
-
     st.divider()
 
     password = st.text_input("Access password", type="password", key="pw_input")

@@ -7,8 +7,6 @@ Run:  streamlit run appv2.py
 import sys
 import os
 
-# Ensure the directory containing this file is on sys.path so that the
-# 'pipeline' package is importable regardless of where Render starts the process.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from collections import defaultdict
@@ -18,17 +16,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ─── Page config — must be the very first Streamlit call ─────────────────────
+st.set_page_config(page_title="Insyte", layout="wide")
+
 # ─── Password gate ────────────────────────────────────────────────────────────
 from auth import check_password  # noqa: E402
 
 if not check_password():
     st.stop()
-
-# ─── Page config ─────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Insyte",
-    layout="wide",
-)
 
 # ─── Brand CSS ────────────────────────────────────────────────────────────────
 # Palette: deep midnight plum · warm cream · bronze/gold
@@ -227,13 +222,23 @@ st.markdown(
 
 @st.cache_resource(show_spinner="Loading the tools...")
 def load_embedding_model():
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer("all-MiniLM-L6-v2")
+    import numpy as np
+    from fastembed import TextEmbedding
 
+    class _EmbedWrapper:
+        """Drop-in replacement for SentenceTransformer using fastembed + ONNX.
+        Uses ~80 MB RAM versus ~400 MB for torch-backed sentence-transformers."""
+        def __init__(self):
+            self._model = TextEmbedding(
+                model_name="BAAI/bge-small-en-v1.5",
+                cache_dir="./.model_cache",
+            )
 
-# Pre-load immediately after auth so the model is warm before any upload.
-# This runs once and is then served from cache — no delay on first upload.
-load_embedding_model()
+        def encode(self, texts, convert_to_numpy=True,
+                   batch_size=64, show_progress_bar=False):
+            return np.array(list(self._model.embed(texts)))
+
+    return _EmbedWrapper()
 
 
 # ─── Pipeline imports ─────────────────────────────────────────────────────────

@@ -4,14 +4,10 @@ services:
     runtime: python
     region: oregon
 
-    # Model is downloaded INTO the project directory (.model_cache) so it is
-    # baked into the build image and available instantly at runtime — no re-download
-    # on cold start.
     buildCommand: >
       pip install -r requirements.txt &&
       python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('stopwords')" &&
-      SENTENCE_TRANSFORMERS_HOME=./.model_cache
-      python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+      python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='./.model_cache').embed(['warmup']))"
 
     startCommand: >
       streamlit run appv2.py
@@ -26,7 +22,5 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: SENTENCE_TRANSFORMERS_HOME
-        value: ./.model_cache
 
     plan: free
