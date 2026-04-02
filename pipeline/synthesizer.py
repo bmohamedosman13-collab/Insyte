@@ -15,9 +15,10 @@ Primary:  Ollama LLM (any locally-installed model)
           - Voice-aware: subject's own account vs. professional's observations
           - Returns structured JSON; mapped back to source pages via keyword overlap
 
-Fallback: sumy LSA + clinical noise filter
+Fallback: centroid-based extractive summarizer (fastembed ONNX)
           - Activated automatically when Ollama is not running
-          - Lower quality but always available
+          - Uses the BAAI/bge-small-en-v1.5 model already in memory
+          - No additional dependencies beyond what the app already loads
 
 Setup
 -----
@@ -294,7 +295,7 @@ def _llm_response_to_sections(parsed: dict, doc: dict) -> dict[str, list[dict]]:
     return sections
 
 
-# ─── Fallback: sumy + noise filter (existing approach) ───────────────────────
+# ─── Fallback: centroid extractive summarizer ────────────────────────────────
 
 _NOISE_PHRASES: list[str] = [
     "i consent", "i agree to", "by signing", "authorized to release",
@@ -444,54 +445,75 @@ def _find_page(sentence: str, doc: dict) -> int:
     return doc["pages"][0]["page_num"] if doc["pages"] else 1
 
 
-def _sumy_one(doc: dict, n: int) -> list[tuple[str, int]]:
-    from sumy.parsers.plaintext import PlaintextParser
-    from sumy.nlp.tokenizers import Tokenizer
-    from sumy.summarizers.lsa import LsaSummarizer
-    from sumy.nlp.stemmers import Stemmer
-    from sumy.utils import get_stop_words
-
-    parser = PlaintextParser.from_string(doc["full_text"], Tokenizer("english"))
-    stemmer = Stemmer("english")
-    summ = LsaSummarizer(stemmer)
-    summ.stop_words = get_stop_words("english")
-    return [(str(s).strip(), _find_page(str(s), doc)) for s in summ(parser.document, n) if str(s).strip()]
+_MODEL_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".model_cache")
 
 
-def _fallback_sentences(doc: dict, n: int) -> list[tuple[str, int]]:
-    raw = re.split(r"(?<=[.!?])\s+", doc["full_text"])
-    result = []
-    for s in raw:
-        s = s.strip()
-        if len(s) > 40:
-            result.append((s, _find_page(s, doc)))
-            if len(result) >= n:
-                break
-    return result
+def _extractive_summarize(doc: dict, num_sentences: int = 8) -> dict[str, list[dict]]:
+    """
+    Centroid-based extractive summarizer using the fastembed ONNX model.
 
+    Replaces the LSA fallback. Uses no new dependencies — the same
+    BAAI/bge-small-en-v1.5 model already loaded for search is reused here.
 
-def _sumy_summarize(doc: dict, num_sentences: int = 8) -> dict[str, list[dict]]:
-    """Fallback summarization via sumy + noise filter + classifier."""
-    candidate_n = num_sentences * 4
-    try:
-        raw = _sumy_one(doc, candidate_n)
-    except Exception:
-        raw = _fallback_sentences(doc, candidate_n)
+    Algorithm:
+      1. Split doc text into candidate sentences (>40 chars, noise/substance filtered)
+      2. Embed all candidates with fastembed
+      3. Rank by dot product with centroid (mean embedding)
+      4. Classify top sentences into sections with the existing keyword classifier
+    """
+    import numpy as np
+
+    max_chars = 14000
+    text = doc["full_text"][:max_chars]
+
+    raw = re.split(r"(?<=[.!?])\s+", text)
+    candidates: list[tuple[str, int]] = [
+        (s.strip(), _find_page(s.strip(), doc))
+        for s in raw
+        if len(s.strip()) > 40
+    ]
 
     filtered = [
-        (s, p) for s, p in raw
-        if s and not _is_noise(s) and _is_substantive(s)
+        (s, p) for s, p in candidates
+        if not _is_noise(s) and _is_substantive(s)
     ]
-    filtered.sort(key=lambda pair: _relevance_score(pair[0]), reverse=True)
+
+    if not filtered:
+        # Nothing passed the filters — rank by relevance score and take top sentences
+        candidates.sort(key=lambda pair: _relevance_score(pair[0]), reverse=True)
+        filtered = candidates[:num_sentences * 4]
+
+    if not filtered:
+        return {}
+
+    sentences = [s for s, _ in filtered]
+
+    # Rank by centroid similarity using the fastembed model already on disk
+    try:
+        from fastembed import TextEmbedding
+        _embed = TextEmbedding(
+            model_name="BAAI/bge-small-en-v1.5",
+            cache_dir=os.path.realpath(_MODEL_CACHE),
+        )
+        embs = np.array(list(_embed.embed(sentences)))
+        centroid = embs.mean(axis=0)
+        scores = embs.dot(centroid)
+        order = np.argsort(scores)[::-1]
+        ranked = [(sentences[i], filtered[i][1]) for i in order]
+    except Exception:
+        # Embedding unavailable — fall back to relevance score ranking
+        ranked = sorted(filtered, key=lambda pair: _relevance_score(pair[0]), reverse=True)
 
     section_counts: dict[str, int] = {}
     sections: dict[str, list[dict]] = defaultdict(list)
-    for sentence, page_num in filtered:
+    for sentence, page_num in ranked:
         sec = _classify_fallback(sentence)
         if section_counts.get(sec, 0) >= 3:
             continue
         sections[sec].append({"sentence": sentence, "page_num": page_num})
         section_counts[sec] = section_counts.get(sec, 0) + 1
+        if sum(section_counts.values()) >= num_sentences:
+            break
 
     return dict(sections)
 
@@ -513,7 +535,7 @@ def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8) -> lis
     """
     Summarize each document independently.
 
-    Tries Ollama LLM first; falls back to sumy if Ollama is unavailable.
+    Tries Ollama LLM first; falls back to centroid extractive summarizer if Ollama is unavailable.
 
     Returns list of per-document objects:
       {
@@ -547,11 +569,11 @@ def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8) -> lis
                     llm_used = True
                     model_used = ollama_model
             except Exception:
-                # LLM call failed — fall through to sumy
+                # LLM call failed — fall through to extractive summarizer
                 pass
 
         if not sections:
-            sections = _sumy_summarize(doc, num_sentences_per_doc)
+            sections = _extractive_summarize(doc, num_sentences_per_doc)
 
         insufficient = sum(len(v) for v in sections.values()) == 0
 
