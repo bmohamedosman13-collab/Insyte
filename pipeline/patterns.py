@@ -109,19 +109,33 @@ def _strip_meta(query: str) -> str:
 def _build_sentence_index(docs: list[dict]) -> list[dict]:
     items: list[dict] = []
     for doc in docs:
-        for page in doc["pages"]:
-            raw = re.split(r"(?<=[.!?])\s+", page["text"])
-            page_sents = [s.strip() for s in raw if len(s.strip()) > 20]
-            for idx, sent in enumerate(page_sents):
-                items.append(
-                    {
+        if "sentences" in doc:
+            from collections import defaultdict as _dd
+            by_page: dict = _dd(list)
+            for s in doc["sentences"]:
+                if len(s["text"]) > 20:  # patterns uses a slightly higher threshold
+                    by_page[s["page_num"]].append(s["text"])
+            for pn, page_sents in by_page.items():
+                for idx, sent in enumerate(page_sents):
+                    items.append({
+                        "sentence": sent,
+                        "filename": doc["filename"],
+                        "page_num": pn,
+                        "_page_sents": page_sents,
+                        "_idx": idx,
+                    })
+        else:
+            for page in doc["pages"]:
+                raw = re.split(r"(?<=[.!?])\s+", page["text"])
+                page_sents = [s.strip() for s in raw if len(s.strip()) > 20]
+                for idx, sent in enumerate(page_sents):
+                    items.append({
                         "sentence": sent,
                         "filename": doc["filename"],
                         "page_num": page["page_num"],
                         "_page_sents": page_sents,
                         "_idx": idx,
-                    }
-                )
+                    })
     return items
 
 
@@ -205,6 +219,8 @@ def pattern_search(
     docs: list[dict],
     model,
     top_n: int = 20,
+    precomputed_index: list[dict] | None = None,
+    precomputed_embeddings=None,
 ) -> dict:
     """
     Search for a user-described pattern across all documents.
@@ -223,16 +239,19 @@ def pattern_search(
     """
     expanded = expand_query(query)
     search_query = _strip_meta(expanded)   # strip "Find X across the documents" wrapper
-    index = _build_sentence_index(docs)
+    index = precomputed_index if precomputed_index is not None else _build_sentence_index(docs)
 
     if not index:
         return {"groups": [], "low_confidence_warning": False,
                 "expanded_query": expanded, "fallback_used": False}
 
     # ── Semantic search ──
-    texts = [item["sentence"] for item in index]
     query_emb = model.encode([search_query], convert_to_numpy=True)
-    doc_embs = model.encode(texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False)
+    if precomputed_embeddings is not None:
+        doc_embs = precomputed_embeddings
+    else:
+        texts = [item["sentence"] for item in index]
+        doc_embs = model.encode(texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False)
     scores = cosine_similarity(query_emb, doc_embs)[0]
 
     ranked = [

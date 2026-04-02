@@ -113,6 +113,9 @@ def _expand_query(query: str) -> str:
 # ─── Passage retrieval ────────────────────────────────────────────────────────
 
 def _split_sentences(doc: dict) -> list[dict]:
+    if "sentences" in doc:
+        return [{"text": s["text"], "page_num": s["page_num"]}
+                for s in doc["sentences"] if len(s["text"]) > 25]
     sentences: list[dict] = []
     for page in doc["pages"]:
         raw = re.split(r"(?<=[.!?])\s+", page["text"])

@@ -655,7 +655,8 @@ if st.session_state.get("_upload_key") != _upload_key:
     for key in ("docs", "synthesis", "risk_results",
                 "kw_results", "kw_fallback", "kw_query",
                 "lang_results", "lang_results_query", "lang_query_input",
-                "pat_result", "pat_query"):
+                "pat_result", "pat_query",
+                "sentence_index", "doc_embeddings"):
         st.session_state.pop(key, None)
 
 if "docs" not in st.session_state:
@@ -685,6 +686,20 @@ if "docs" not in st.session_state:
             st.session_state["risk_results"] = []
             st.warning(f"Risk scan failed: {exc}")
 
+    with st.spinner("Building search index…"):
+        try:
+            from pipeline.keyword_search import _build_sentence_index
+            _idx = _build_sentence_index(docs)
+            if _idx:
+                _texts = [item["sentence"] for item in _idx]
+                _embs = embed_model.encode(
+                    _texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False
+                )
+                st.session_state["sentence_index"] = _idx
+                st.session_state["doc_embeddings"] = _embs
+        except Exception:
+            pass  # non-fatal — search falls back to live encoding
+
 docs: list[dict]         = st.session_state.get("docs", [])
 synthesis: list[dict]    = st.session_state.get("synthesis", [])
 risk_results: list[dict] = st.session_state.get("risk_results", [])
@@ -697,6 +712,25 @@ if not docs:
 # rendered yet (edge case: rerun before first processing completes)
 nav_selection = st.session_state.get("nav_radio", "Summary")
 doc_choice    = st.session_state.get("doc_filter", "All documents")
+
+
+def _filter_precomputed(target_docs: list[dict]):
+    """
+    Return (sentence_index, embeddings) filtered to target_docs.
+    Both are None if the cache isn't ready — callers fall back to live encoding.
+    """
+    full_idx  = st.session_state.get("sentence_index")
+    full_embs = st.session_state.get("doc_embeddings")
+    if full_idx is None or full_embs is None:
+        return None, None
+    target_fns = {d["filename"] for d in target_docs}
+    if len(target_fns) == len({item["filename"] for item in full_idx}):
+        # All docs selected — use the full cache directly
+        return full_idx, full_embs
+    mask = [i for i, item in enumerate(full_idx) if item["filename"] in target_fns]
+    if not mask:
+        return None, None
+    return [full_idx[i] for i in mask], full_embs[mask]
 
 # ─── Apply document filter ────────────────────────────────────────────────────
 
@@ -751,7 +785,11 @@ elif active == "keyword":
     if st.button("Search", disabled=not bool(query.strip()), key="keyword_search_btn"):
         embed_model = load_embedding_model()
         with st.spinner("Searching…"):
-            kw_results = contextual_search(query, active_docs, embed_model, top_n=12)
+            _idx, _embs = _filter_precomputed(active_docs)
+            kw_results = contextual_search(
+                query, active_docs, embed_model, top_n=12,
+                precomputed_index=_idx, precomputed_embeddings=_embs,
+            )
             kw_fallback = False
             if not kw_results:
                 kw_results = exact_search(query, active_docs)
@@ -922,7 +960,11 @@ elif active == "patterns":
     if st.button("Search for pattern", disabled=not bool(pattern_query)):
         embed_model = load_embedding_model()
         with st.spinner("Searching for pattern…"):
-            pat_result = pattern_search(pattern_query, active_docs, embed_model, top_n=20)
+            _idx, _embs = _filter_precomputed(active_docs)
+            pat_result = pattern_search(
+                pattern_query, active_docs, embed_model, top_n=20,
+                precomputed_index=_idx, precomputed_embeddings=_embs,
+            )
         st.session_state["pat_result"] = pat_result
         st.session_state["pat_query"]  = pattern_query
 

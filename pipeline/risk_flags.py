@@ -94,30 +94,30 @@ _SAFETY_PLAN_MARKERS: list[str] = [
 ]
 
 
-def _get_page_context(filename: str, page_num: int, docs: list[dict]) -> str:
-    """Return lowercased text of the flagged page plus one page either side."""
-    texts: list[str] = []
-    for doc in docs:
-        if doc["filename"] != filename:
-            continue
-        for page in doc["pages"]:
-            if abs(page["page_num"] - page_num) <= 1:
-                texts.append(page["text"].lower())
-    return " ".join(texts)
+def _build_page_index(docs: list[dict]) -> dict[tuple[str, int], str]:
+    """Build {(filename, page_num): lowercased_text} for O(1) context lookup."""
+    return {
+        (doc["filename"], page["page_num"]): page["text"].lower()
+        for doc in docs
+        for page in doc["pages"]
+    }
 
 
-def _classify_severity(item: dict, docs: list[dict]) -> str:
-    context = _get_page_context(item["filename"], item["page_num"], docs)
+def _classify_severity_indexed(item: dict, page_index: dict[tuple[str, int], str]) -> str:
+    """Classify severity using a pre-built page index instead of linear doc scan."""
+    fn, pn = item["filename"], item["page_num"]
+    context = " ".join(
+        page_index.get((fn, pn + offset), "")
+        for offset in (-1, 0, 1)
+    )
     sentence_lower = item["sentence"].lower()
 
-    # If the context contains documented assessment language → assessed
     if any(marker in context for marker in _ASSESSED_MARKERS):
         return "assessed"
 
-    # If the sentence itself has acute/active language and no safety plan nearby → acute
-    has_acute_language = any(marker in sentence_lower for marker in _ACUTE_SENTENCE_MARKERS)
-    has_safety_plan = any(marker in context for marker in _SAFETY_PLAN_MARKERS)
-    if has_acute_language and not has_safety_plan:
+    has_acute = any(marker in sentence_lower for marker in _ACUTE_SENTENCE_MARKERS)
+    has_plan  = any(marker in context for marker in _SAFETY_PLAN_MARKERS)
+    if has_acute and not has_plan:
         return "acute"
 
     return "unassessed"
@@ -128,18 +128,24 @@ def _classify_severity(item: dict, docs: list[dict]) -> str:
 def _all_sentences(docs: list[dict]) -> list[dict]:
     results: list[dict] = []
     for doc in docs:
-        for page in doc["pages"]:
-            raw = re.split(r"(?<=[.!?])\s+", page["text"])
-            for sent in raw:
-                sent = sent.strip()
-                if len(sent) > 10:
-                    results.append(
-                        {
+        if "sentences" in doc:
+            for s in doc["sentences"]:
+                results.append({
+                    "sentence": s["text"],
+                    "filename": doc["filename"],
+                    "page_num": s["page_num"],
+                })
+        else:
+            for page in doc["pages"]:
+                raw = re.split(r"(?<=[.!?])\s+", page["text"])
+                for sent in raw:
+                    sent = sent.strip()
+                    if len(sent) > 10:
+                        results.append({
                             "sentence": sent,
                             "filename": doc["filename"],
                             "page_num": page["page_num"],
-                        }
-                    )
+                        })
     return results
 
 
@@ -187,7 +193,9 @@ def scan_risks(docs: list[dict]) -> list[dict]:
             seen.add(key)
             deduped.append(item)
 
+    # Build page index once — O(1) lookup vs O(n) linear scan per flagged sentence
+    page_index = _build_page_index(docs)
     for item in deduped:
-        item["severity"] = _classify_severity(item, docs)
+        item["severity"] = _classify_severity_indexed(item, page_index)
 
     return deduped

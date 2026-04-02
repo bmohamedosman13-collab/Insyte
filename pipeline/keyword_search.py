@@ -22,23 +22,39 @@ from sklearn.metrics.pairwise import cosine_similarity
 def _build_sentence_index(docs: list[dict]) -> list[dict]:
     """
     Return all sentences with their neighbours on the same page.
-    Each item includes private _page_sentences and _idx used to fetch context.
+    Uses doc['sentences'] pre-split by extractor when available;
+    falls back to splitting from doc['pages'] otherwise.
+    Each item includes private _page_sents and _idx used to fetch context.
     """
     items: list[dict] = []
     for doc in docs:
-        for page in doc["pages"]:
-            raw = re.split(r"(?<=[.!?])\s+", page["text"])
-            page_sents = [s.strip() for s in raw if len(s.strip()) > 10]
-            for idx, sent in enumerate(page_sents):
-                items.append(
-                    {
+        if "sentences" in doc:
+            # Group pre-split sentences by page to reconstruct context lists
+            from collections import defaultdict as _dd
+            by_page: dict = _dd(list)
+            for s in doc["sentences"]:
+                by_page[s["page_num"]].append(s["text"])
+            for pn, page_sents in by_page.items():
+                for idx, sent in enumerate(page_sents):
+                    items.append({
+                        "sentence": sent,
+                        "filename": doc["filename"],
+                        "page_num": pn,
+                        "_page_sents": page_sents,
+                        "_idx": idx,
+                    })
+        else:
+            for page in doc["pages"]:
+                raw = re.split(r"(?<=[.!?])\s+", page["text"])
+                page_sents = [s.strip() for s in raw if len(s.strip()) > 10]
+                for idx, sent in enumerate(page_sents):
+                    items.append({
                         "sentence": sent,
                         "filename": doc["filename"],
                         "page_num": page["page_num"],
                         "_page_sents": page_sents,
                         "_idx": idx,
-                    }
-                )
+                    })
     return items
 
 
@@ -75,23 +91,30 @@ def contextual_search(
     docs: list[dict],
     model,
     top_n: int = 10,
+    precomputed_index: list[dict] | None = None,
+    precomputed_embeddings=None,
 ) -> list[dict]:
     """
     Semantic search with surrounding context.
 
+    Pass precomputed_index + precomputed_embeddings (from session state) to
+    avoid re-encoding the full document on every search — only the query
+    sentence needs encoding in that case.
+
     Returns list of:
       {sentence (with keywords bolded), context_before, context_after,
        filename, page_num, score}
-
-    Grouped by filename in the UI — raw list returned here.
     """
-    index = _build_sentence_index(docs)
+    index = precomputed_index if precomputed_index is not None else _build_sentence_index(docs)
     if not index:
         return []
 
-    texts = [item["sentence"] for item in index]
     query_emb = model.encode([query], convert_to_numpy=True)
-    doc_embs = model.encode(texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False)
+    if precomputed_embeddings is not None:
+        doc_embs = precomputed_embeddings
+    else:
+        texts = [item["sentence"] for item in index]
+        doc_embs = model.encode(texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False)
     scores = cosine_similarity(query_emb, doc_embs)[0]
 
     THRESHOLD = 0.28  # below this all matches are noise; triggers exact_search fallback
