@@ -655,8 +655,7 @@ if st.session_state.get("_upload_key") != _upload_key:
     for key in ("docs", "synthesis", "risk_results",
                 "kw_results", "kw_fallback", "kw_query",
                 "lang_results", "lang_results_query", "lang_query_input",
-                "pat_result", "pat_query",
-                "sentence_index", "doc_embeddings"):
+                "pat_result", "pat_query"):
         st.session_state.pop(key, None)
 
 if "docs" not in st.session_state:
@@ -686,19 +685,9 @@ if "docs" not in st.session_state:
             st.session_state["risk_results"] = []
             st.warning(f"Risk scan failed: {exc}")
 
-    with st.spinner("Building search index…"):
-        try:
-            from pipeline.keyword_search import _build_sentence_index
-            _idx = _build_sentence_index(docs)
-            if _idx:
-                _texts = [item["sentence"] for item in _idx]
-                _embs = embed_model.encode(
-                    _texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False
-                )
-                st.session_state["sentence_index"] = _idx
-                st.session_state["doc_embeddings"] = _embs
-        except Exception:
-            pass  # non-fatal — search falls back to live encoding
+    # Rerun so the sidebar re-renders with docs now in session state,
+    # which makes the nav radio and doc selector appear.
+    st.rerun()
 
 docs: list[dict]         = st.session_state.get("docs", [])
 synthesis: list[dict]    = st.session_state.get("synthesis", [])
