@@ -782,14 +782,12 @@ elif active == "sentiment":
         key="lang_scope",
     )
     if scope_choice == "One document":
-        scope_docs = [
-            d for d in active_docs
-            if d["filename"] == st.selectbox(
-                "Document",
-                [d["filename"] for d in active_docs],
-                key="lang_doc_select",
-            )
-        ]
+        selected_filename = st.selectbox(
+            "Document",
+            [d["filename"] for d in active_docs],
+            key="lang_doc_select",
+        )
+        scope_docs = [d for d in active_docs if d["filename"] == selected_filename]
     else:
         scope_docs = active_docs
 

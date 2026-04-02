@@ -156,7 +156,7 @@ def _exact_matches(sentences: list[dict]) -> list[dict]:
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
-def scan_risks(docs: list[dict], model) -> list[dict]:
+def scan_risks(docs: list[dict], model=None) -> list[dict]:
     """
     Scan all documents for risk / crisis language.
 
