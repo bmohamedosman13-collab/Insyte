@@ -7,6 +7,7 @@ Run:  streamlit run appv2.py
 import sys
 import os
 import numpy as np
+from PIL import Image as _PILImage
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _APP_DIR)
@@ -22,7 +23,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ─── Page config — must be the very first Streamlit call ─────────────────────
-st.set_page_config(page_title="Insyte", layout="wide")
+_favicon_path = os.path.join(_APP_DIR, "insyte-favicon-32x32.png")
+_favicon = _PILImage.open(_favicon_path) if os.path.exists(_favicon_path) else "✦"
+st.set_page_config(page_title="Insyte", layout="wide", page_icon=_favicon)
 
 # ─── Password gate ────────────────────────────────────────────────────────────
 from auth import check_password  # noqa: E402
@@ -31,11 +34,11 @@ if not check_password():
     st.stop()
 
 # ─── Brand CSS ────────────────────────────────────────────────────────────────
-# Palette: deep midnight plum · warm cream · bronze/gold
-# #0C0820  background          #F5EFE0  cream text
-# #160F2E  sidebar             #C4B89A  muted cream
-# #1C1438  card surface        #C9A84C  gold accent
-# #35265A  border              #D9BF6E  gold hover
+# Palette: plum · lavender · spark · cream
+# #2D1B4E  background          #F2EFF8  cream text
+# #1F1238  sidebar             #B8AECE  muted text
+# #3D2460  card surface        #C4A8FF  spark accent
+# #4A3070  border              #D4B8FF  spark hover
 
 st.markdown(
     """
@@ -55,10 +58,10 @@ st.markdown(
     }
 
     /* ── App canvas ── */
-    .stApp { background-color: #0C0820; }
-    .main  { background-color: #0C0820; }
+    .stApp { background-color: #2D1B4E; }
+    .main  { background-color: #2D1B4E; }
     .main .block-container {
-        background-color: #0C0820;
+        background-color: #2D1B4E;
         padding-top: 1.5rem;
         max-width: 1100px;
         margin-left: auto !important;
@@ -69,55 +72,55 @@ st.markdown(
     [data-testid="stSidebar"],
     [data-testid="stSidebar"] > div:first-child,
     [data-testid="stSidebar"] > div {
-        background-color: #160F2E !important;
-        border-right: 1px solid #35265A;
+        background-color: #1F1238 !important;
+        border-right: 1px solid #4A3070;
         overflow: hidden !important;
     }
 
     /* ── Global text ── */
     .stMarkdown p, label, .stSelectbox label, [data-testid="stWidgetLabel"] p {
-        color: #F5EFE0;
+        color: #F2EFF8;
     }
     .stCaption p, [data-testid="stCaptionContainer"] p {
-        color: #C4B89A !important;
+        color: #B8AECE !important;
     }
 
     /* ── Bordered containers / cards ── */
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #1C1438 !important;
-        border: 1px solid #35265A !important;
+        background-color: #3D2460 !important;
+        border: 1px solid #4A3070 !important;
         border-radius: 8px !important;
     }
 
     /* ── Buttons ── */
     .stButton > button {
-        background-color: #1C1438;
-        color: #F5EFE0;
-        border: 1px solid #35265A;
+        background-color: #3D2460;
+        color: #F2EFF8;
+        border: 1px solid #4A3070;
         border-radius: 6px;
         font-family: 'DM Sans', sans-serif;
         transition: background 0.15s, border-color 0.15s;
     }
     .stButton > button:hover {
-        background-color: rgba(201,168,76,0.12);
-        border-color: #C9A84C;
-        color: #F5EFE0;
+        background-color: rgba(196,168,255,0.12);
+        border-color: #C4A8FF;
+        color: #F2EFF8;
     }
     .stButton > button:focus {
-        border-color: #C9A84C;
-        box-shadow: 0 0 0 2px rgba(201,168,76,0.22);
+        border-color: #C4A8FF;
+        box-shadow: 0 0 0 2px rgba(196,168,255,0.22);
     }
 
     /* ── Primary button (Analyse language) ── */
     .stButton > button[kind="primary"] {
-        background-color: #C9A84C;
-        color: #0C0820;
+        background-color: #C4A8FF;
+        color: #2D1B4E;
         border: none;
         font-weight: 600;
     }
     .stButton > button[kind="primary"]:hover {
-        background-color: #D9BF6E;
-        color: #0C0820;
+        background-color: #D4B8FF;
+        color: #2D1B4E;
     }
 
     /* ── Sidebar nav radio ── */
@@ -132,77 +135,77 @@ st.markdown(
         align-items: center;
         padding: 8px 12px 8px 14px;
         border-radius: 4px;
-        color: #C4B89A;
+        color: #B8AECE;
         font-size: 0.88rem;
         cursor: pointer;
         border-left: 3px solid transparent;
         transition: background 0.15s, color 0.15s;
     }
     [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-        background: rgba(201,168,76,0.07);
-        color: #F5EFE0;
+        background: rgba(196,168,255,0.07);
+        color: #F2EFF8;
     }
     [data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
         display: none;
     }
     [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-        background: rgba(201,168,76,0.10);
-        border-left: 3px solid #C9A84C;
-        color: #F5EFE0;
+        background: rgba(196,168,255,0.10);
+        border-left: 3px solid #C4A8FF;
+        color: #F2EFF8;
         font-weight: 500;
     }
 
     /* ── Selectbox ── */
     .stSelectbox > div > div {
-        background-color: #1C1438;
-        border: 1px solid #35265A;
-        color: #F5EFE0;
+        background-color: #3D2460;
+        border: 1px solid #4A3070;
+        color: #F2EFF8;
         border-radius: 6px;
     }
     .stSelectbox > div > div:focus-within {
-        border-color: #C9A84C;
-        box-shadow: 0 0 0 2px rgba(201,168,76,0.2);
+        border-color: #C4A8FF;
+        box-shadow: 0 0 0 2px rgba(196,168,255,0.2);
     }
 
     /* ── File uploader ── */
     [data-testid="stFileUploader"] section {
-        background-color: #1C1438;
-        border: 1px dashed #35265A;
+        background-color: #3D2460;
+        border: 1px dashed #4A3070;
         border-radius: 8px;
     }
     [data-testid="stFileUploader"] section:hover {
-        border-color: #C9A84C;
+        border-color: #C4A8FF;
     }
 
     /* ── Text input ── */
     .stTextInput > div > div > input {
-        background-color: #1C1438;
-        border: 1px solid #35265A;
-        color: #F5EFE0;
+        background-color: #3D2460;
+        border: 1px solid #4A3070;
+        color: #F2EFF8;
         border-radius: 6px;
     }
     .stTextInput > div > div > input:focus {
-        border-color: #C9A84C;
-        box-shadow: 0 0 0 2px rgba(201,168,76,0.2);
+        border-color: #C4A8FF;
+        box-shadow: 0 0 0 2px rgba(196,168,255,0.2);
     }
     .stTextInput > div > div > input::placeholder {
-        color: #C4B89A;
+        color: #B8AECE;
     }
 
     /* ── Expanders ── */
     [data-testid="stExpander"] {
-        border: 1px solid #35265A !important;
-        background-color: #160F2E !important;
+        border: 1px solid #4A3070 !important;
+        background-color: #1F1238 !important;
         border-radius: 6px !important;
     }
-    [data-testid="stExpander"] summary { color: #C4B89A; }
-    [data-testid="stExpander"] summary:hover { color: #F5EFE0; }
+    [data-testid="stExpander"] summary { color: #B8AECE; }
+    [data-testid="stExpander"] summary:hover { color: #F2EFF8; }
 
     /* ── Progress bars ── */
-    .stProgress > div > div > div { background-color: #C9A84C; }
+    .stProgress > div > div > div { background-color: #C4A8FF; }
 
     /* ── Dividers ── */
-    hr { border-color: #35265A !important; }
+    hr { border-color: #4A3070 !important; }
 
     /* ── Alert colours ── */
     div[data-testid="stAlert"] { border-radius: 6px; }
@@ -213,14 +216,14 @@ st.markdown(
         font-family: 'Cormorant Garamond', serif !important;
         font-size: 1.4rem;
         font-weight: 600;
-        color: #F5EFE0 !important;
+        color: #F2EFF8 !important;
         letter-spacing: 0.04em;
         margin: 4px 0 2px 0;
         line-height: 1.3;
     }
     .insyte-tagline {
         font-size: 0.68rem;
-        color: #C9A84C !important;
+        color: #C4A8FF !important;
         letter-spacing: 0.10em;
         text-transform: uppercase;
         margin: 0 0 4px 0;
@@ -342,14 +345,14 @@ def _render_risk_detail(risk_results: list[dict]) -> None:
 
 _CONFIDENCE_COLOURS = {
     "Strong":   ("#0A1F10", "#6ee7a0"),
-    "Moderate": ("#2A1E00", "#C9A84C"),
+    "Moderate": ("#2A1B4A", "#C4A8FF"),
     "Weak":     ("#2A1010", "#e09090"),
     "Exact":    ("#0F1E38", "#8ab8e0"),
 }
 
 
 def _confidence_chip_html(label: str) -> str:
-    bg, fg = _CONFIDENCE_COLOURS.get(label, ("#1A1035", "#A89BC2"))
+    bg, fg = _CONFIDENCE_COLOURS.get(label, ("#2D1B4E", "#B8AECE"))
     return (
         f'<span style="background:{bg};color:{fg};padding:1px 8px;'
         f'border-radius:10px;font-size:0.75rem;font-weight:600;">'
@@ -358,10 +361,10 @@ def _confidence_chip_html(label: str) -> str:
 
 
 _INTENSITY_STYLE = {
-    "absent":   ("#1C1438", "#C4B89A"),
-    "mild":     ("#2A1E00", "#C9A84C"),
+    "absent":   ("#3D2460", "#B8AECE"),
+    "mild":     ("#2A1B4A", "#C4A8FF"),
     "moderate": ("#0F1E38", "#8ab8e0"),
-    "strong":   ("#1A0D30", "#D9BF6E"),
+    "strong":   ("#1A0D30", "#D4B8FF"),
 }
 
 _INTENSITY_LABEL = {
@@ -442,7 +445,7 @@ _TAG_RULES: list[tuple[str, str, list[str] | None]] = [
 _CHIP_STYLES = {
     "risk":     ("#2A1010",          "#e09090"),
     "clinical": ("#0F1E38",          "#8ab8e0"),
-    "stressor": ("rgba(42,30,0,0.9)", "#C9A84C"),
+    "stressor": ("rgba(42,27,74,0.9)", "#C4A8FF"),
 }
 
 
@@ -556,9 +559,9 @@ def _render_summary_card(doc_summary: dict, risk_results: list[dict]) -> None:
                         st.markdown(f"**{icon} {section_name}**")
                         for item in items:
                             st.markdown(
-                                f'<div style="border-left:2px solid #C9A84C;'
+                                f'<div style="border-left:2px solid #C4A8FF;'
                                 f'padding:4px 10px;margin:4px 0;'
-                                f'font-size:0.9rem;color:#E8D9BA;">'
+                                f'font-size:0.9rem;color:#F2EFF8;">'
                                 f'{item["sentence"]}'
                                 f'</div>',
                                 unsafe_allow_html=True,
@@ -905,12 +908,12 @@ elif active == "sentiment":
                         note  = ev.get("note", "")
                         page  = ev.get("page_num", "?")
                         st.markdown(
-                            f'<div style="border-left:3px solid #C9A84C;'
+                            f'<div style="border-left:3px solid #C4A8FF;'
                             f'padding:8px 14px;margin:6px 0;'
-                            f'background:#160F2E;border-radius:0 6px 6px 0;">'
-                            f'<span style="color:#E8D9BA;font-style:italic;">'
+                            f'background:#1F1238;border-radius:0 6px 6px 0;">'
+                            f'<span style="color:#F2EFF8;font-style:italic;">'
                             f'&ldquo;{quote}&rdquo;</span>'
-                            f'<br><span style="color:#C4B89A;font-size:0.78rem;">'
+                            f'<br><span style="color:#B8AECE;font-size:0.78rem;">'
                             f'p.&nbsp;{page}&ensp;·&ensp;{note}</span>'
                             f'</div>',
                             unsafe_allow_html=True,

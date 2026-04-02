@@ -22,49 +22,49 @@ html, body, [class*="css"], p, li, span, div {
     margin-left: auto !important;
     margin-right: auto !important;
     padding-top: 5rem !important;
-    background-color: #0C0820 !important;
+    background-color: #2D1B4E !important;
 }
-.stApp { background-color: #0C0820; }
+.stApp { background-color: #2D1B4E; }
 
 /* Wordmark */
 .insyte-login-wordmark {
     font-family: 'Cormorant Garamond', serif !important;
     font-size: 2.4rem;
     font-weight: 600;
-    color: #F5EFE0 !important;
+    color: #F2EFF8 !important;
     letter-spacing: 0.06em;
     margin: 0 0 2px 0;
     line-height: 1.2;
 }
 .insyte-login-sub {
     font-size: 0.72rem;
-    color: #C9A84C !important;
+    color: #C4A8FF !important;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     margin: 0 0 2rem 0;
 }
 
 /* Divider */
-hr { border-color: #35265A !important; }
+hr { border-color: #4A3070 !important; }
 
 /* Input */
 .stTextInput > div > div > input {
-    background-color: #160F2E;
-    border: 1px solid #35265A;
-    color: #F5EFE0;
+    background-color: #1F1238;
+    border: 1px solid #4A3070;
+    color: #F2EFF8;
     border-radius: 6px;
     font-family: 'DM Sans', sans-serif;
 }
 .stTextInput > div > div > input:focus {
-    border-color: #C9A84C;
-    box-shadow: 0 0 0 2px rgba(201,168,76,0.2);
+    border-color: #C4A8FF;
+    box-shadow: 0 0 0 2px rgba(196,168,255,0.2);
 }
-.stTextInput > label p { color: #C4B89A !important; }
+.stTextInput > label p { color: #B8AECE !important; }
 
 /* Button */
 .stButton > button {
-    background-color: #C9A84C;
-    color: #0C0820;
+    background-color: #C4A8FF;
+    color: #1F1238;
     border: none;
     border-radius: 6px;
     font-family: 'DM Sans', sans-serif;
@@ -73,26 +73,26 @@ hr { border-color: #35265A !important; }
     transition: background 0.15s;
 }
 .stButton > button:hover {
-    background-color: #D9BF6E;
-    color: #0C0820;
+    background-color: #D4B8FF;
+    color: #1F1238;
     border: none;
 }
 
 /* Disclaimer */
 .insyte-disclaimer {
-    background-color: #160F2E;
-    border: 1px solid #35265A;
+    background-color: #1F1238;
+    border: 1px solid #4A3070;
     border-radius: 6px;
     padding: 12px 14px;
     margin-top: 1.6rem;
     font-size: 0.75rem;
-    color: #C4B89A;
+    color: #B8AECE;
     line-height: 1.6;
 }
-.insyte-disclaimer a { color: #C9A84C; text-decoration: none; }
+.insyte-disclaimer a { color: #C4A8FF; text-decoration: none; }
 
 div[data-testid="stAlert"] { border-radius: 6px; }
-.stMarkdown p { color: #F5EFE0; }
+.stMarkdown p { color: #F2EFF8; }
 </style>
 """
 
