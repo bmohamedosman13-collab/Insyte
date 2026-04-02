@@ -74,7 +74,7 @@ st.markdown(
     [data-testid="stSidebar"] > div {
         background-color: #1F1238 !important;
         border-right: 1px solid #4A3070;
-        overflow: hidden !important;
+        overflow-y: auto !important;
     }
 
     /* ── Global text ── */
