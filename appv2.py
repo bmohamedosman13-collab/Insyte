@@ -603,7 +603,7 @@ _upload_key = tuple(sorted(f.name for f in uploaded_files))
 
 if st.session_state.get("_upload_key") != _upload_key:
     st.session_state["_upload_key"] = _upload_key
-    for key in ("docs", "synthesis", "risk_results"):
+    for key in ("docs", "synthesis", "risk_results", "kw_results", "kw_fallback", "kw_query"):
         st.session_state.pop(key, None)
 
 if "docs" not in st.session_state:
@@ -717,23 +717,32 @@ elif active == "keyword":
     query = st.text_input(
         "Search across documents",
         placeholder="e.g. housing instability, medication, family conflict…",
+        key="keyword_query",
     )
 
-    if query:
+    if st.button("Search", disabled=not bool(query.strip()), key="keyword_search_btn"):
         embed_model = load_embedding_model()
         with st.spinner("Searching…"):
-            results = contextual_search(query, active_docs, embed_model, top_n=12)
-            fallback_used = False
-            if not results:
-                results = exact_search(query, active_docs)
-                fallback_used = True
+            kw_results = contextual_search(query, active_docs, embed_model, top_n=12)
+            kw_fallback = False
+            if not kw_results:
+                kw_results = exact_search(query, active_docs)
+                kw_fallback = True
+        st.session_state["kw_results"] = kw_results
+        st.session_state["kw_fallback"] = kw_fallback
+        st.session_state["kw_query"] = query
 
-        if fallback_used:
+    kw_results  = st.session_state.get("kw_results")
+    kw_fallback = st.session_state.get("kw_fallback", False)
+    kw_query    = st.session_state.get("kw_query", "")
+
+    if kw_results is not None and kw_query:
+        if kw_fallback:
             st.caption("No strong semantic matches — showing exact matches instead.")
 
-        if results:
+        if kw_results:
             grouped: dict[str, list[dict]] = defaultdict(list)
-            for r in results:
+            for r in kw_results:
                 grouped[r["filename"]].append(r)
             for filename, matches in grouped.items():
                 st.markdown(f"**{filename}** — {len(matches)} match(es)")
