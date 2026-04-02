@@ -673,7 +673,7 @@ if "docs" not in st.session_state:
 
     with st.spinner("Generating intelligence summary…"):
         try:
-            synthesis = summarize_documents(docs)
+            synthesis = summarize_documents(docs, embed_model=embed_model)
         except Exception as exc:  # noqa: BLE001
             synthesis = []
             st.warning(f"Summarization failed: {exc}")

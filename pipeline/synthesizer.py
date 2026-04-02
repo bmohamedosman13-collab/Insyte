@@ -445,10 +445,7 @@ def _find_page(sentence: str, doc: dict) -> int:
     return doc["pages"][0]["page_num"] if doc["pages"] else 1
 
 
-_MODEL_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".model_cache")
-
-
-def _extractive_summarize(doc: dict, num_sentences: int = 8) -> dict[str, list[dict]]:
+def _extractive_summarize(doc: dict, num_sentences: int = 8, embed_model=None) -> dict[str, list[dict]]:
     """
     Centroid-based extractive summarizer using the fastembed ONNX model.
 
@@ -488,20 +485,19 @@ def _extractive_summarize(doc: dict, num_sentences: int = 8) -> dict[str, list[d
 
     sentences = [s for s, _ in filtered]
 
-    # Rank by centroid similarity using the fastembed model already on disk
+    # Rank by centroid similarity using the already-loaded embed_model.
+    # Never instantiate a new model here — that would load a second ONNX
+    # session alongside the cached one in appv2.py, doubling memory usage.
     try:
-        from fastembed import TextEmbedding
-        _embed = TextEmbedding(
-            model_name="BAAI/bge-small-en-v1.5",
-            cache_dir=os.path.realpath(_MODEL_CACHE),
-        )
-        embs = np.array(list(_embed.embed(sentences)))
+        if embed_model is None:
+            raise ValueError("no model")
+        embs = embed_model.encode(sentences, convert_to_numpy=True)
         centroid = embs.mean(axis=0)
         scores = embs.dot(centroid)
         order = np.argsort(scores)[::-1]
         ranked = [(sentences[i], filtered[i][1]) for i in order]
     except Exception:
-        # Embedding unavailable — fall back to relevance score ranking
+        # Model not available — fall back to relevance score ranking
         ranked = sorted(filtered, key=lambda pair: _relevance_score(pair[0]), reverse=True)
 
     section_counts: dict[str, int] = {}
@@ -531,7 +527,7 @@ def get_ollama_status() -> dict:
     return {"available": True, "model": model}
 
 
-def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8) -> list[dict]:
+def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8, embed_model=None) -> list[dict]:
     """
     Summarize each document independently.
 
@@ -573,7 +569,7 @@ def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8) -> lis
                 pass
 
         if not sections:
-            sections = _extractive_summarize(doc, num_sentences_per_doc)
+            sections = _extractive_summarize(doc, num_sentences_per_doc, embed_model)
 
         insufficient = sum(len(v) for v in sections.values()) == 0
 
