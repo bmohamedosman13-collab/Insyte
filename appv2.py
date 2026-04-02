@@ -603,7 +603,10 @@ _upload_key = tuple(sorted(f.name for f in uploaded_files))
 
 if st.session_state.get("_upload_key") != _upload_key:
     st.session_state["_upload_key"] = _upload_key
-    for key in ("docs", "synthesis", "risk_results", "kw_results", "kw_fallback", "kw_query"):
+    for key in ("docs", "synthesis", "risk_results",
+                "kw_results", "kw_fallback", "kw_query",
+                "lang_results", "lang_results_query", "lang_query_input",
+                "pat_result", "pat_query"):
         st.session_state.pop(key, None)
 
 if "docs" not in st.session_state:
@@ -766,22 +769,17 @@ elif active == "sentiment":
     chip_cols = st.columns(4)
     for _i, _qq in enumerate(_QUICK_LANG_QUERIES):
         if chip_cols[_i % 4].button(_qq, key=f"langchip_{_i}", use_container_width=True):
-            st.session_state["lang_preset"] = _qq
             st.session_state["lang_query_input"] = _qq
 
     # ── Query input ──
-    _preset = st.session_state.get("lang_preset", "")
     lang_query = st.text_input(
         "What type of language are you looking for?",
-        value=_preset,
         placeholder=(
             "e.g. depressive language  ·  satisfaction with treatment  ·  "
             "trauma indicators  ·  functional capacity"
         ),
         key="lang_query_input",
     )
-    # Keep preset in sync so next rerun preserves the typed value
-    st.session_state["lang_preset"] = lang_query
 
     # ── Document scope ──
     scope_choice = st.radio(
@@ -895,14 +893,20 @@ elif active == "patterns":
     if st.button("Search for pattern", disabled=not bool(pattern_query)):
         embed_model = load_embedding_model()
         with st.spinner("Searching for pattern…"):
-            result = pattern_search(pattern_query, active_docs, embed_model, top_n=20)
+            pat_result = pattern_search(pattern_query, active_docs, embed_model, top_n=20)
+        st.session_state["pat_result"] = pat_result
+        st.session_state["pat_query"]  = pattern_query
 
-        groups        = result["groups"]
-        expanded_query = result["expanded_query"]
-        low_conf      = result["low_confidence_warning"]
-        fallback_used = result["fallback_used"]
+    pat_result = st.session_state.get("pat_result")
+    pat_query  = st.session_state.get("pat_query", "")
 
-        if expanded_query.lower() != pattern_query.lower():
+    if pat_result is not None and pat_query:
+        groups         = pat_result["groups"]
+        expanded_query = pat_result["expanded_query"]
+        low_conf       = pat_result["low_confidence_warning"]
+        fallback_used  = pat_result["fallback_used"]
+
+        if expanded_query.lower() != pat_query.lower():
             st.caption(f"Query expanded to: *{expanded_query}*")
 
         if not groups:
