@@ -19,6 +19,7 @@ def extract_documents(
 
     for uploaded_file in uploaded_files:
         try:
+            uploaded_file.seek(0)
             raw_bytes = uploaded_file.read()
             pdf = fitz.open(stream=io.BytesIO(raw_bytes), filetype="pdf")
 

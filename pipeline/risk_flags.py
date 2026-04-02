@@ -156,7 +156,7 @@ def _exact_matches(sentences: list[dict]) -> list[dict]:
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
-def scan_risks(docs: list[dict], model=None) -> list[dict]:
+def scan_risks(docs: list[dict]) -> list[dict]:
     """
     Scan all documents for risk / crisis language.
 
@@ -166,6 +166,10 @@ def scan_risks(docs: list[dict], model=None) -> list[dict]:
       {sentence, filename, page_num, match_type, matched_phrase, severity}
 
     severity: "assessed" | "unassessed" | "acute"
+
+    Semantic scanning was removed to stay within the 512 MB memory budget
+    of the free hosting tier. Keyword matching covers all clinically
+    significant risk language without the embedding overhead.
     """
     sentences = _all_sentences(docs)
     if not sentences:
@@ -173,7 +177,17 @@ def scan_risks(docs: list[dict], model=None) -> list[dict]:
 
     all_flagged = _exact_matches(sentences)
 
+    # Deduplicate: repeated headers / boilerplate produce identical sentences
+    # across pages — keep only the first occurrence per (filename, sentence).
+    seen: set[tuple[str, str]] = set()
+    deduped: list[dict] = []
     for item in all_flagged:
+        key = (item["filename"], item["sentence"].strip().lower())
+        if key not in seen:
+            seen.add(key)
+            deduped.append(item)
+
+    for item in deduped:
         item["severity"] = _classify_severity(item, docs)
 
-    return all_flagged
+    return deduped

@@ -43,7 +43,10 @@ st.markdown(
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Cormorant+Garamond:wght@400;600&display=swap');
 
     /* ── Typography ── */
-    html, body, [class*="css"], p, li, span, div {
+    html, body, [class*="css"], p, li, span {
+        font-family: 'DM Sans', sans-serif;
+    }
+    .main div, [data-testid="stSidebar"] div {
         font-family: 'DM Sans', sans-serif;
     }
     h1, h2, h3 {
@@ -58,13 +61,17 @@ st.markdown(
         background-color: #0C0820;
         padding-top: 1.5rem;
         max-width: 1100px;
+        margin-left: auto !important;
+        margin-right: auto !important;
     }
 
     /* ── Sidebar ── */
     [data-testid="stSidebar"],
-    [data-testid="stSidebar"] > div:first-child {
+    [data-testid="stSidebar"] > div:first-child,
+    [data-testid="stSidebar"] > div {
         background-color: #160F2E !important;
         border-right: 1px solid #35265A;
+        overflow: hidden !important;
     }
 
     /* ── Global text ── */
@@ -449,7 +456,7 @@ def _build_prose_summary(sections: dict) -> str:
             if len(sentence) > 220:
                 sentence = sentence[:217].rstrip() + "…"
             chosen.append(sentence)
-    return "  ".join(chosen)
+    return "\n\n".join(chosen)
 
 
 def _detect_tags(doc_summary: dict, risk_results: list[dict]) -> list[tuple[str, str]]:
@@ -461,12 +468,17 @@ def _detect_tags(doc_summary: dict, risk_results: list[dict]) -> list[tuple[str,
         for item in items
     )
     found: list[tuple[str, str]] = []
+
+    # Risk tag is always evaluated first, regardless of the 3-tag cap, so it
+    # can never be displaced by reordering _TAG_RULES.
+    if any(r["filename"] == filename for r in risk_results):
+        found.append(("Risk language present", "risk"))
+
     for label, chip_type, keywords in _TAG_RULES:
         if len(found) >= 3:
             break
         if label == "Risk language present":
-            if any(r["filename"] == filename for r in risk_results):
-                found.append((label, chip_type))
+            continue  # already handled above
         elif label == "Presenting concerns noted":
             if sections.get("Presenting Concerns") or sections.get("Subject's Account"):
                 found.append((label, chip_type))
@@ -504,6 +516,8 @@ def _render_summary_card(doc_summary: dict, risk_results: list[dict]) -> None:
             # LLM / fallback badge
             if llm_used and model_used:
                 st.caption(f"AI · `{model_used}`")
+            if doc_summary.get("truncated"):
+                st.caption("⚠ Long document — only the first portion was analysed.")
 
         with right:
             if insufficient:
@@ -568,7 +582,7 @@ def _render_pattern_match(match: dict) -> None:
             cols[2].caption(f"{match['score']:.2f}")
 
 
-# ─── Sidebar: header + file upload ───────────────────────────────────────────
+# ─── Sidebar (single block — never split across st.stop) ─────────────────────
 
 with st.sidebar:
     st.markdown(
@@ -585,6 +599,41 @@ with st.sidebar:
         help="Typed PDFs only. Scanned/image PDFs are not supported.",
     )
 
+    # Doc-dependent nav — only rendered once docs are in session state
+    _sb_docs   = st.session_state.get("docs", [])
+    _sb_risks  = st.session_state.get("risk_results", [])
+    if _sb_docs:
+        all_filenames = [d["filename"] for d in _sb_docs]
+        if len(all_filenames) > 1:
+            doc_choice = st.selectbox(
+                "Document",
+                ["All documents"] + all_filenames,
+                key="doc_filter",
+            )
+        else:
+            doc_choice = "All documents"
+            st.caption(all_filenames[0])
+
+        st.divider()
+
+        nav_selection = st.radio(
+            "Navigation",
+            ["Summary", "Keyword Search", "Language Analysis", "Pattern Search", "Risk Flags"],
+            key="nav_radio",
+            label_visibility="collapsed",
+        )
+
+        if _sb_risks:
+            st.divider()
+            acute_count     = sum(1 for r in _sb_risks if r["severity"] == "acute")
+            unassessed_count = sum(1 for r in _sb_risks if r["severity"] == "unassessed")
+            if acute_count:
+                st.error(f"High priority — {acute_count} risk flag(s)")
+            elif unassessed_count:
+                st.warning(f"Review needed — {unassessed_count} flag(s)")
+            else:
+                st.info(f"{len(_sb_risks)} assessed flag(s)")
+
 # ─── Disclaimer (always visible in main area) ─────────────────────────────────
 
 st.warning(
@@ -599,7 +648,7 @@ if not uploaded_files:
 
 # ─── Processing (cached by file set) ─────────────────────────────────────────
 
-_upload_key = tuple(sorted(f.name for f in uploaded_files))
+_upload_key = tuple(sorted((f.name, f.size) for f in uploaded_files))
 
 if st.session_state.get("_upload_key") != _upload_key:
     st.session_state["_upload_key"] = _upload_key
@@ -630,48 +679,24 @@ if "docs" not in st.session_state:
         st.session_state["synthesis"] = synthesis
 
     with st.spinner("Scanning for risk language…"):
-        st.session_state["risk_results"] = scan_risks(docs)
+        try:
+            st.session_state["risk_results"] = scan_risks(docs)
+        except Exception as exc:  # noqa: BLE001
+            st.session_state["risk_results"] = []
+            st.warning(f"Risk scan failed: {exc}")
 
-docs: list[dict]       = st.session_state["docs"]
-synthesis: list[dict]  = st.session_state["synthesis"]
-risk_results: list[dict] = st.session_state["risk_results"]
+docs: list[dict]         = st.session_state.get("docs", [])
+synthesis: list[dict]    = st.session_state.get("synthesis", [])
+risk_results: list[dict] = st.session_state.get("risk_results", [])
 
-# ─── Sidebar: document selector + navigation ─────────────────────────────────
+if not docs:
+    st.error("Document processing failed. Please try re-uploading.")
+    st.stop()
 
-with st.sidebar:
-    # Document filter
-    all_filenames = [d["filename"] for d in docs]
-    if len(all_filenames) > 1:
-        doc_choice = st.selectbox(
-            "Document",
-            ["All documents"] + all_filenames,
-            key="doc_filter",
-        )
-    else:
-        doc_choice = "All documents"
-        st.caption(all_filenames[0])
-
-    st.divider()
-
-    # Navigation
-    nav_selection = st.radio(
-        "Navigation",
-        ["Summary", "Keyword Search", "Language Analysis", "Pattern Search", "Risk Flags"],
-        key="nav_radio",
-        label_visibility="collapsed",
-    )
-
-    # Risk indicator badge (only if flags exist)
-    if risk_results:
-        st.divider()
-        acute_count = sum(1 for r in risk_results if r["severity"] == "acute")
-        unassessed_count = sum(1 for r in risk_results if r["severity"] == "unassessed")
-        if acute_count:
-            st.error(f"High priority — {acute_count} risk flag(s)")
-        elif unassessed_count:
-            st.warning(f"Review needed — {unassessed_count} flag(s)")
-        else:
-            st.info(f"{len(risk_results)} assessed flag(s)")
+# nav_selection / doc_choice fall back to defaults if sidebar widgets aren't
+# rendered yet (edge case: rerun before first processing completes)
+nav_selection = st.session_state.get("nav_radio", "Summary")
+doc_choice    = st.session_state.get("doc_filter", "All documents")
 
 # ─── Apply document filter ────────────────────────────────────────────────────
 
@@ -806,13 +831,17 @@ elif active == "sentiment":
         embed_model = load_embedding_model()
         results: list[dict] = []
         prog = st.progress(0, text="Analysing…")
-        for _n, _doc in enumerate(scope_docs):
-            prog.progress(
-                (_n + 1) / len(scope_docs),
-                text=f"Analysing {_doc['filename']}…",
-            )
-            results.append(analyze_language(lang_query.strip(), _doc, embed_model))
-        prog.empty()
+        try:
+            for _n, _doc in enumerate(scope_docs):
+                prog.progress(
+                    (_n + 1) / len(scope_docs),
+                    text=f"Analysing {_doc['filename']}…",
+                )
+                results.append(analyze_language(lang_query.strip(), _doc, embed_model))
+        except Exception as exc:  # noqa: BLE001
+            st.warning(f"Analysis failed: {exc}")
+        finally:
+            prog.empty()
         st.session_state["lang_results"] = results
         st.session_state["lang_results_query"] = lang_query.strip()
 

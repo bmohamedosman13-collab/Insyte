@@ -32,11 +32,8 @@ Environment variables (optional):
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import urllib.request
-import urllib.error
 from collections import defaultdict
 from difflib import SequenceMatcher
 
@@ -177,67 +174,14 @@ def _attribution_page(fragment: str, doc: dict) -> int:
 
 # ─── Ollama integration ───────────────────────────────────────────────────────
 
-_OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-
-# Model preference order: more capable / domain-trained first
-_MODEL_PREFERENCE = [
-    "meditron",          # medical fine-tune of llama2
-    "llama3.1:70b",      # best reasoning if hardware allows
-    "llama3.1:8b",
-    "llama3.1",
-    "llama3.2:3b",
-    "llama3.2",
-    "llama3",
-    "mistral:7b",
-    "mistral",
-    "phi4",
-    "phi3:medium",
-    "phi3",
-    "gemma2:9b",
-    "gemma2",
-    "qwen2.5:7b",
-    "qwen2.5",
-]
+from .ollama_client import (
+    ollama_available as _ollama_available,
+    get_best_model as _get_best_model,
+    call_ollama as _call_ollama,
+    parse_llm_json as _parse_llm_json,
+)
 
 
-def _ollama_available() -> bool:
-    try:
-        req = urllib.request.Request(
-            f"{_OLLAMA_URL}/api/tags",
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
-
-
-def _get_best_model() -> str | None:
-    """Return the best available Ollama model, or None if Ollama is not running."""
-    # Allow explicit override
-    env_model = os.getenv("OLLAMA_MODEL")
-    if env_model:
-        return env_model
-
-    try:
-        req = urllib.request.Request(f"{_OLLAMA_URL}/api/tags")
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            data = json.loads(resp.read().decode())
-            available = [m["name"].split(":")[0] for m in data.get("models", [])]
-            # Return the highest-priority match
-            for preferred in _MODEL_PREFERENCE:
-                base = preferred.split(":")[0]
-                if base in available:
-                    # Find the full name (with tag) from available models
-                    for m in data["models"]:
-                        if m["name"].split(":")[0] == base:
-                            return m["name"]
-            # If nothing preferred is available, return whatever is installed
-            if data.get("models"):
-                return data["models"][0]["name"]
-    except Exception:
-        pass
-    return None
 
 
 def _build_prompt(doc_text: str, doc_type: str) -> list[dict]:
@@ -318,75 +262,6 @@ DOCUMENT ({doc_type}):
     ]
 
 
-def _call_ollama(messages: list[dict], model: str) -> str:
-    """
-    POST to Ollama /api/chat. Returns the assistant's message content string.
-    Raises RuntimeError on failure.
-    """
-    payload = json.dumps({
-        "model":   model,
-        "messages": messages,
-        "format":  "json",    # ask Ollama to constrain output to valid JSON
-        "stream":  False,
-        "options": {
-            "temperature": 0.15,   # slight creativity to produce synthesis rather than copying
-            "num_predict": 2000,   # enough for a full structured synthesized response
-            "top_p": 0.9,
-        },
-    }).encode()
-
-    req = urllib.request.Request(
-        f"{_OLLAMA_URL}/api/chat",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            body = json.loads(resp.read().decode())
-            return body["message"]["content"]
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Ollama connection failed: {e}") from e
-    except (KeyError, json.JSONDecodeError) as e:
-        raise RuntimeError(f"Unexpected Ollama response format: {e}") from e
-
-
-def _parse_llm_json(raw: str) -> dict:
-    """
-    Parse the LLM's response into a dict, handling common failure modes:
-      1. Perfect JSON string
-      2. JSON wrapped in ```json ... ``` code fence
-      3. JSON with trailing commas (common LLM mistake)
-      4. Partial JSON — return whatever was parsed before the error
-    """
-    # Strip leading/trailing whitespace and any markdown fences
-    text = raw.strip()
-    fence_match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
-    if fence_match:
-        text = fence_match.group(1).strip()
-
-    # Try direct parse
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    # Strip trailing commas before } or ] (common LLM output error)
-    cleaned = re.sub(r",\s*([}\]])", r"\1", text)
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-
-    # Last resort: extract the outermost {...} block and try again
-    brace_match = re.search(r"\{[\s\S]+\}", cleaned)
-    if brace_match:
-        try:
-            return json.loads(brace_match.group(0))
-        except json.JSONDecodeError:
-            pass
-
-    return {}
 
 
 def _llm_response_to_sections(parsed: dict, doc: dict) -> dict[str, list[dict]]:
@@ -678,7 +553,7 @@ def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8) -> lis
         if not sections:
             sections = _sumy_summarize(doc, num_sentences_per_doc)
 
-        insufficient = sum(len(v) for v in sections.values()) < 2
+        insufficient = sum(len(v) for v in sections.values()) == 0
 
         results.append({
             "filename":                    doc["filename"],
@@ -688,6 +563,7 @@ def summarize_documents(docs: list[dict], num_sentences_per_doc: int = 8) -> lis
             "insufficient_clinical_content": insufficient,
             "llm_used":                    llm_used,
             "model_used":                  model_used,
+            "truncated":                   len(doc["full_text"]) > 14000,
             "sections":                    sections,
         })
 

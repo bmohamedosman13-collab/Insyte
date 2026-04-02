@@ -42,7 +42,6 @@ _EXPANSIONS: list[tuple[str, str]] = [
     ("DBT",   "dialectical behaviour therapy"),
     ("ACT",   "acceptance and commitment therapy"),
     ("GAF",   "global assessment of functioning"),
-    ("PTSD",  "post-traumatic stress disorder"),
     ("CDSS",  "calgary depression scale for schizophrenia"),
     ("PHQ",   "patient health questionnaire"),
     ("GAD-7", "generalized anxiety disorder scale"),

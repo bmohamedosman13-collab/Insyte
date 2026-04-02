@@ -94,10 +94,14 @@ def contextual_search(
     doc_embs = model.encode(texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False)
     scores = cosine_similarity(query_emb, doc_embs)[0]
 
-    top_indices = np.argsort(scores)[::-1][:top_n]
+    THRESHOLD = 0.28  # below this all matches are noise; triggers exact_search fallback
 
     results: list[dict] = []
-    for idx in top_indices:
+    for idx in np.argsort(scores)[::-1]:
+        if len(results) >= top_n:
+            break
+        if float(scores[idx]) < THRESHOLD:
+            break
         item = index[idx]
         before, after = _extract_context(item)
         results.append(

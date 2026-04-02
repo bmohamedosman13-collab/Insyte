@@ -19,11 +19,11 @@ import re
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-from .synthesizer import (
-    _call_ollama,
-    _get_best_model,
-    _ollama_available,
-    _parse_llm_json,
+from .ollama_client import (
+    call_ollama as _call_ollama,
+    get_best_model as _get_best_model,
+    ollama_available as _ollama_available,
+    parse_llm_json as _parse_llm_json,
 )
 
 # ─── Intensity thresholds ─────────────────────────────────────────────────────
