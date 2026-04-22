@@ -688,6 +688,25 @@ if "docs" not in st.session_state:
             st.session_state["risk_results"] = []
             st.warning(f"Risk scan failed: {exc}")
 
+    # Pre-compute sentence embeddings once so searches don't re-encode on every query.
+    with st.spinner("Indexing documents…"):
+        try:
+            from pipeline.keyword_search import _build_sentence_index
+            _sent_idx = _build_sentence_index(docs)
+            if _sent_idx:
+                _texts = [item["sentence"] for item in _sent_idx]
+                _embs = embed_model.encode(_texts, convert_to_numpy=True, batch_size=64, show_progress_bar=False)
+                st.session_state["sentence_index"] = _sent_idx
+                st.session_state["doc_embeddings"] = _embs
+        except Exception:
+            pass
+
+    # Drop full_text from docs — it's no longer needed after summarization and risk scan,
+    # and it can be very large (entire raw PDF text).
+    for doc in docs:
+        doc.pop("full_text", None)
+    st.session_state["docs"] = docs
+
     # Rerun so the sidebar re-renders with docs now in session state,
     # which makes the nav radio and doc selector appear.
     st.rerun()
